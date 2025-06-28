@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = [
+    "backend",
+    "frontend",
+    "shared",
+]
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+shared = { path = "./shared" } 

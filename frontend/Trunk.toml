@@ -1,0 +1,17 @@
+[watch]
+# Paths to watch for changes
+watch = ["../backend/src", "src"]
+
+[serve]
+# The address to serve on
+address = "127.0.0.1"
+# The port to serve on
+port = 8080
+# Open a browser tab when the server starts
+open = true
+
+[[proxy]]
+# Proxy requests to the backend server
+backend = "http://127.0.0.1:3000/api/"
+# The URI path to proxy
+uri = "/api/" 

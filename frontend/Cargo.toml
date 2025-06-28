@@ -1,0 +1,16 @@
+[package]
+name = "frontend"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+yew = { version = "0.21", features = ["csr"] }
+wasm-bindgen = "0.2"
+# Use reqwasm as it's a simpler wrapper around gloo-net for wasm requests
+reqwasm = "0.5"
+wasm-bindgen-futures = "0.4"
+serde = { workspace = true }
+shared = { workspace = true }
+gloo-console = "0.3"

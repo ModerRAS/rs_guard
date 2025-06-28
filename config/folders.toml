@@ -1,0 +1,12 @@
+# List of directories to protect.
+# Use absolute paths or paths relative to the `backend` executable.
+# Example for Windows: "C:/Users/YourUser/Documents/Protected"
+# Example for Linux: "/home/user/protected"
+watched_directories = [
+    "./test-data/source"
+]
+
+# Reed-Solomon encoding parameters
+# N + M = total shards
+data_shards = 4
+parity_shards = 2 
