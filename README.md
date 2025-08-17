@@ -41,30 +41,30 @@
 graph TB
     subgraph "用户界面层"
         UI[Web 浏览器]
-        FRONTEND[Yew 前端应用<br/>(WebAssembly)]
+        FRONTEND["Yew 前端应用<br/>(WebAssembly)"]
     end
     
     subgraph "API 层"
-        API[Axum Web 服务器<br/>端口 3000]
-        STATIC[静态文件服务<br/>(开发模式: 文件系统<br/>生产模式: 内嵌资源)]
+        API["Axum Web 服务器<br/>端口 3000"]
+        STATIC["静态文件服务<br/>(开发模式: 文件系统<br/>生产模式: 内嵌资源)"]
     end
     
     subgraph "业务逻辑层"
         CORE[核心服务引擎]
-        WATCHER[文件监控器<br/>notify]
-        ENCODER[Reed-Solomon 编码器<br/>reed-solomon-erasure]
+        WATCHER["文件监控器<br/>notify"]
+        ENCODER["Reed-Solomon 编码器<br/>reed-solomon-erasure"]
         CHECKER[完整性检查器]
         REPAIR[数据修复器]
-        SCHEDULER[任务调度器<br/>定时检查]
+        SCHEDULER["任务调度器<br/>定时检查"]
     end
     
     subgraph "数据存储层"
-        METADATA[元数据数据库<br/>sled (嵌入式)]
-        FILESYSTEM[文件系统<br/>原始文件 + 分片]
+        METADATA["元数据数据库<br/>sled (嵌入式)"]
+        FILESYSTEM["文件系统<br/>原始文件 + 分片"]
     end
     
     subgraph "配置层"
-        CONFIG[配置管理器<br/>folders.toml]
+        CONFIG["配置管理器<br/>folders.toml"]
     end
     
     UI --> FRONTEND
@@ -89,18 +89,22 @@ graph TB
     
     CORE --> CONFIG
     
-    style UI fill:#e1f5fe
-    style FRONTEND fill:#e8f5e8
-    style API fill:#fff3e0
-    style CORE fill:#f3e5f5
-    style WATCHER fill:#e8eaf6
-    style ENCODER fill:#e8eaf6
-    style CHECKER fill:#e8eaf6
-    style REPAIR fill:#e8eaf6
-    style SCHEDULER fill:#e8eaf6
-    style METADATA fill:#fce4ec
-    style FILESYSTEM fill:#fce4ec
-    style CONFIG fill:#f1f8e9
+    classDef ui fill:#e1f5fe
+    classDef frontend fill:#e8f5e8
+    classDef api fill:#fff3e0
+    classDef core fill:#f3e5f5
+    classDef service fill:#e8eaf6
+    classDef storage fill:#fce4ec
+    classDef config fill:#f1f8e9
+    
+    class UI ui
+    class FRONTEND frontend
+    class API api
+    class STATIC api
+    class CORE core
+    class WATCHER,ENCODER,CHECKER,REPAIR,SCHEDULER service
+    class METADATA,FILESYSTEM storage
+    class CONFIG config
 ```
 
 ### 数据流程图
@@ -147,17 +151,17 @@ sequenceDiagram
 ```mermaid
 graph LR
     subgraph "编码过程"
-        A[原始文件<br/>100MB]
+        A["原始文件<br/>100MB"]
         B[数据分片器]
-        C[Reed-Solomon<br/>编码引擎]
-        D[数据分片存储<br/>4个 × 25MB]
-        E[校验分片存储<br/>2个 × 25MB]
+        C["Reed-Solomon<br/>编码引擎"]
+        D["数据分片存储<br/>4个 × 25MB"]
+        E["校验分片存储<br/>2个 × 25MB"]
     end
     
     subgraph "解码/修复过程"
-        F[可用分片<br/>任意 4+个]
-        G[Reed-Solomon<br/>重构引擎]
-        H[重构的原始文件<br/>100MB]
+        F["可用分片<br/>任意 4+个"]
+        G["Reed-Solomon<br/>重构引擎"]
+        H["重构的原始文件<br/>100MB"]
     end
     
     A --> B
@@ -168,90 +172,95 @@ graph LR
     F --> G
     G --> H
     
-    style A fill:#e3f2fd
-    style B fill:#f3e5f5
-    style C fill:#e8f5e8
-    style D fill:#fff3e0
-    style E fill:#ffebee
-    style F fill:#fff3e0
-    style G fill:#e8f5e8
-    style H fill:#e3f2fd
+    classDef input fill:#e3f2fd
+    classDef process fill:#f3e5f5
+    classDef engine fill:#e8f5e8
+    classDef data fill:#fff3e0
+    classDef parity fill:#ffebee
+    classDef output fill:#e3f2fd
+    
+    class A input
+    class B process
+    class C engine
+    class D data
+    class E parity
+    class F data
+    class G engine
+    class H output
 ```
 
 ### 组件交互详细图
 
 ```mermaid
-graph TB
-    subgraph "Backend 核心模块"
-        LIB[lib.rs<br/>应用入口]
-        MAIN[main.rs<br/>程序启动]
-        CONFIG[config.rs<br/>配置管理]
-        
-        subgraph "核心服务"
-            WATCHER[watcher.rs<br/>文件监控]
-            ENCODER[encoder.rs<br/>编码/解码]
-            CHECKER[checker.rs<br/>完整性检查]
-            REPAIR[repair.rs<br/>数据修复]
-            METADATA[metadata.rs<br/>元数据管理]
-        end
-        
-        subgraph "Web 服务"
-            ROUTER[路由管理]
-            HANDLERS[API 处理器]
-            STATIC[静态文件服务]
-        end
-    end
+classDiagram
+    class App {
+        +state: AppState
+        +config: Config
+        +services: Services
+        +run()
+        +shutdown()
+    }
     
-    subgraph "Frontend 模块"
-        YEW[Yew 组件]
-        API[API 客户端]
-        STATE[状态管理]
-    end
+    class AppState {
+        +watcher_handle: JoinHandle
+        +scheduler_handle: JoinHandle
+        +shutdown_flag: AtomicBool
+    }
     
-    subgraph "共享模块"
-        SHARED[共享数据结构<br/>AppStatus, ServiceStatus]
-    end
+    class Config {
+        +watched_dirs: Vec~WatchedDir~
+        +data_shards: usize
+        +parity_shards: usize
+        +check_interval: Duration
+        +load(path: PathBuf) Result~Config, Error~
+    }
     
-    MAIN --> LIB
-    LIB --> CONFIG
-    LIB --> WATCHER
-    LIB --> ENCODER
-    LIB --> CHECKER
-    LIB --> REPAIR
-    LIB --> METADATA
-    LIB --> ROUTER
+    class Services {
+        +watcher: FileWatcher
+        +encoder: ReedSolomonEncoder
+        +checker: IntegrityChecker
+        +repair: DataRepair
+        +metadata: MetadataManager
+    }
     
-    ROUTER --> HANDLERS
-    ROUTER --> STATIC
+    class FileWatcher {
+        +watch(dirs: Vec~PathBuf~)
+        +on_file_event(callback: Fn(FileEvent))
+        +stop()
+    }
     
-    HANDLERS --> SHARED
-    YEW --> SHARED
-    API --> SHARED
+    class ReedSolomonEncoder {
+        +encode_file(path: PathBuf) Result~(), Error~
+        +decode_file(path: PathBuf) Result~(), Error~
+        +data_shards: usize
+        +parity_shards: usize
+    }
     
-    HANDLERS --> WATCHER
-    HANDLERS --> CHECKER
-    HANDLERS --> REPAIR
+    class IntegrityChecker {
+        +check_file(path: PathBuf) Result~CheckResult, Error~
+        +check_all_files() Result~Vec~CheckResult~, Error~
+    }
     
-    WATCHER --> METADATA
-    ENCODER --> METADATA
-    CHECKER --> METADATA
-    REPAIR --> METADATA
+    class DataRepair {
+        +repair_file(path: PathBuf) Result~(), Error~
+        +repair_all_damaged() Result~usize, Error~
+    }
     
-    style LIB fill:#e8eaf6
-    style MAIN fill:#e8eaf6
-    style CONFIG fill:#f1f8e9
-    style WATCHER fill:#fff3e0
-    style ENCODER fill:#fff3e0
-    style CHECKER fill:#fff3e0
-    style REPAIR fill:#fff3e0
-    style METADATA fill:#fff3e0
-    style ROUTER fill:#e3f2fd
-    style HANDLERS fill:#e3f2fd
-    style STATIC fill:#e3f2fd
-    style YEW fill:#e8f5e8
-    style API fill:#e8f5e8
-    style STATE fill:#e8f5e8
-    style SHARED fill:#f3e5f5
+    class MetadataManager {
+        +store_file_metadata(meta: FileMetadata) Result~(), Error~
+        +get_file_metadata(path: PathBuf) Result~FileMetadata, Error~
+        +list_all_files() Result~Vec~FileMetadata~, Error~
+    }
+    
+    App --> AppState
+    App --> Config
+    App --> Services
+    
+    Services --> FileWatcher
+    Services --> ReedSolomonEncoder
+    Services --> IntegrityChecker
+    Services --> DataRepair
+    Services --> MetadataManager
 ```
 
 ## 🚀 快速上手
