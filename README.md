@@ -33,6 +33,227 @@
 
 如果希望深入了解项目结构，请查阅 [**架构概览**](./docs/architecture.md)。
 
+## 🏗️ 系统架构
+
+### 整体架构图
+
+```mermaid
+graph TB
+    subgraph "用户界面层"
+        UI[Web 浏览器]
+        FRONTEND[Yew 前端应用<br/>(WebAssembly)]
+    end
+    
+    subgraph "API 层"
+        API[Axum Web 服务器<br/>端口 3000]
+        STATIC[静态文件服务<br/>(开发模式: 文件系统<br/>生产模式: 内嵌资源)]
+    end
+    
+    subgraph "业务逻辑层"
+        CORE[核心服务引擎]
+        WATCHER[文件监控器<br/>notify]
+        ENCODER[Reed-Solomon 编码器<br/>reed-solomon-erasure]
+        CHECKER[完整性检查器]
+        REPAIR[数据修复器]
+        SCHEDULER[任务调度器<br/>定时检查]
+    end
+    
+    subgraph "数据存储层"
+        METADATA[元数据数据库<br/>sled (嵌入式)]
+        FILESYSTEM[文件系统<br/>原始文件 + 分片]
+    end
+    
+    subgraph "配置层"
+        CONFIG[配置管理器<br/>folders.toml]
+    end
+    
+    UI --> FRONTEND
+    FRONTEND --> API
+    API --> CORE
+    API --> STATIC
+    
+    CORE --> WATCHER
+    CORE --> ENCODER
+    CORE --> CHECKER
+    CORE --> REPAIR
+    CORE --> SCHEDULER
+    
+    WATCHER --> FILESYSTEM
+    ENCODER --> FILESYSTEM
+    CHECKER --> FILESYSTEM
+    REPAIR --> FILESYSTEM
+    
+    CORE --> METADATA
+    CHECKER --> METADATA
+    REPAIR --> METADATA
+    
+    CORE --> CONFIG
+    
+    style UI fill:#e1f5fe
+    style FRONTEND fill:#e8f5e8
+    style API fill:#fff3e0
+    style CORE fill:#f3e5f5
+    style WATCHER fill:#e8eaf6
+    style ENCODER fill:#e8eaf6
+    style CHECKER fill:#e8eaf6
+    style REPAIR fill:#e8eaf6
+    style SCHEDULER fill:#e8eaf6
+    style METADATA fill:#fce4ec
+    style FILESYSTEM fill:#fce4ec
+    style CONFIG fill:#f1f8e9
+```
+
+### 数据流程图
+
+```mermaid
+sequenceDiagram
+    participant F as 文件系统
+    participant W as Watcher
+    participant E as Encoder
+    participant M as Metadata
+    participant C as Checker
+    participant R as Repair
+    participant S as 调度器
+    
+    Note over F,S: 文件保护流程
+    F->>W: 文件创建/修改事件
+    W->>E: 触发编码
+    E->>F: 读取原始文件
+    E->>E: Reed-Solomon 编码
+    E->>F: 存储数据分片和校验分片
+    E->>M: 存储元数据
+    
+    Note over F,S: 定时检查流程
+    S->>C: 每小时触发检查
+    C->>M: 获取文件列表
+    C->>F: 验证文件完整性
+    C->>F: 验证分片完整性
+    alt 发现损坏
+        C->>M: 标记需要修复
+        C->>C: 记录损坏信息
+    end
+    
+    Note over F,S: 自动修复流程
+    S->>R: 触发修复
+    R->>M: 获取损坏文件列表
+    R->>F: 读取可用分片
+    R->>R: Reed-Solomon 重构
+    R->>F: 写入修复的分片/文件
+    R->>M: 更新元数据状态
+```
+
+### Reed-Solomon 编码架构
+
+```mermaid
+graph LR
+    subgraph "编码过程"
+        A[原始文件<br/>100MB]
+        B[数据分片器]
+        C[Reed-Solomon<br/>编码引擎]
+        D[数据分片存储<br/>4个 × 25MB]
+        E[校验分片存储<br/>2个 × 25MB]
+    end
+    
+    subgraph "解码/修复过程"
+        F[可用分片<br/>任意 4+个]
+        G[Reed-Solomon<br/>重构引擎]
+        H[重构的原始文件<br/>100MB]
+    end
+    
+    A --> B
+    B --> C
+    C --> D
+    C --> E
+    
+    F --> G
+    G --> H
+    
+    style A fill:#e3f2fd
+    style B fill:#f3e5f5
+    style C fill:#e8f5e8
+    style D fill:#fff3e0
+    style E fill:#ffebee
+    style F fill:#fff3e0
+    style G fill:#e8f5e8
+    style H fill:#e3f2fd
+```
+
+### 组件交互详细图
+
+```mermaid
+graph TB
+    subgraph "Backend 核心模块"
+        LIB[lib.rs<br/>应用入口]
+        MAIN[main.rs<br/>程序启动]
+        CONFIG[config.rs<br/>配置管理]
+        
+        subgraph "核心服务"
+            WATCHER[watcher.rs<br/>文件监控]
+            ENCODER[encoder.rs<br/>编码/解码]
+            CHECKER[checker.rs<br/>完整性检查]
+            REPAIR[repair.rs<br/>数据修复]
+            METADATA[metadata.rs<br/>元数据管理]
+        end
+        
+        subgraph "Web 服务"
+            ROUTER[路由管理]
+            HANDLERS[API 处理器]
+            STATIC[静态文件服务]
+        end
+    end
+    
+    subgraph "Frontend 模块"
+        YEW[Yew 组件]
+        API[API 客户端]
+        STATE[状态管理]
+    end
+    
+    subgraph "共享模块"
+        SHARED[共享数据结构<br/>AppStatus, ServiceStatus]
+    end
+    
+    MAIN --> LIB
+    LIB --> CONFIG
+    LIB --> WATCHER
+    LIB --> ENCODER
+    LIB --> CHECKER
+    LIB --> REPAIR
+    LIB --> METADATA
+    LIB --> ROUTER
+    
+    ROUTER --> HANDLERS
+    ROUTER --> STATIC
+    
+    HANDLERS --> SHARED
+    YEW --> SHARED
+    API --> SHARED
+    
+    HANDLERS --> WATCHER
+    HANDLERS --> CHECKER
+    HANDLERS --> REPAIR
+    
+    WATCHER --> METADATA
+    ENCODER --> METADATA
+    CHECKER --> METADATA
+    REPAIR --> METADATA
+    
+    style LIB fill:#e8eaf6
+    style MAIN fill:#e8eaf6
+    style CONFIG fill:#f1f8e9
+    style WATCHER fill:#fff3e0
+    style ENCODER fill:#fff3e0
+    style CHECKER fill:#fff3e0
+    style REPAIR fill:#fff3e0
+    style METADATA fill:#fff3e0
+    style ROUTER fill:#e3f2fd
+    style HANDLERS fill:#e3f2fd
+    style STATIC fill:#e3f2fd
+    style YEW fill:#e8f5e8
+    style API fill:#e8f5e8
+    style STATE fill:#e8f5e8
+    style SHARED fill:#f3e5f5
+```
+
 ## 🚀 快速上手
 
 ### 环境准备
