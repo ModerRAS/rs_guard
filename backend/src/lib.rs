@@ -11,9 +11,11 @@ use shared::AppStatus;
 use tower_http::services::ServeDir;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use anyhow::Result;
+// 在 release 构建中启用静态资源嵌入
+#[cfg(not(debug_assertions))]
 use rust_embed::RustEmbed;
-use axum_embed::Serve;
 
+#[cfg(not(debug_assertions))]
 #[derive(RustEmbed)]
 #[folder = "../frontend/dist/"]
 struct Assets;
@@ -107,7 +109,7 @@ pub fn app_router(app_state: AppState, db: DbState) -> Router {
         // In release builds, serve from the embedded assets for a single-binary deployment
         Router::new()
             .nest("/api", api_router)
-            .fallback_service(Serve::<Assets>::new())
+            .fallback_service(ServeDir::new("../frontend/dist").append_index_html_on_directories(true))
     }
 }
 
